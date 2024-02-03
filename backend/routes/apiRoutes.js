@@ -178,7 +178,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
   // .skip(skip)
   // .limit(limit)
 
-  /* Khởi tạo một aggregation pipeline trong mongodb để kết nối ngoài trái bảng Job (trái) và bảng Recruiter (phải) theo userId rồi tìm những bản ghi phù hợp với findParams */
+  /* Khởi tạo một aggregation pipeline trong mongodb để thực hiện phép kết nối ngoài trái bảng Job (trái) và bảng Recruiter (phải) theo userId rồi tìm những bản ghi phù hợp với findParams */
   let arr = [
     {
       $lookup: {
@@ -252,12 +252,13 @@ router.get("/jobs/:id", jwtAuth, (req, res) => {
 // to update info of a particular job
 router.put("/jobs/:id", jwtAuth, (req, res) => {
   const user = req.user;
-  if (user.type != "recruiter") { // Chỉ có 
+  if (user.type != "recruiter") { // Chỉ có recruiter mới được cập nhật info của job.
     res.status(401).json({
       message: "You don't have permissions to change the job details",
     });
     return;
   }
+  // Tìm 1 job theo jobId và id của recruiter
   Job.findOne({
     _id: req.params.id,
     userId: user.id,
@@ -269,6 +270,7 @@ router.put("/jobs/:id", jwtAuth, (req, res) => {
         });
         return;
       }
+      // Cập nhật các thông tin
       const data = req.body;
       if (data.maxApplicants) {
         job.maxApplicants = data.maxApplicants;
@@ -280,7 +282,7 @@ router.put("/jobs/:id", jwtAuth, (req, res) => {
         job.deadline = data.deadline;
       }
       job
-        .save()
+        .save()  // Lưu lại cập nhật
         .then(() => {
           res.json({
             message: "Job details updated successfully",
@@ -304,6 +306,7 @@ router.delete("/jobs/:id", jwtAuth, (req, res) => {
     });
     return;
   }
+  // Tìm job rồi xóa
   Job.findOneAndDelete({
     _id: req.params.id,
     userId: user.id,
@@ -325,6 +328,7 @@ router.delete("/jobs/:id", jwtAuth, (req, res) => {
 });
 
 // get user's personal details
+// Truy vấn thông tin của Recruiter hoặc Applicant và gửi response
 router.get("/user", jwtAuth, (req, res) => {
   const user = req.user;
   if (user.type === "recruiter") {
@@ -408,6 +412,7 @@ router.get("/user/:id", jwtAuth, (req, res) => {
 router.put("/user", jwtAuth, (req, res) => {
   const user = req.user;
   const data = req.body;
+  /* Truy vấn Recruiter/Applicant theo id, cập nhật info và lưu lại vào CSDL */
   if (user.type == "recruiter") {
     Recruiter.findOne({ userId: user._id })
       .then((recruiter) => {
@@ -483,9 +488,10 @@ router.put("/user", jwtAuth, (req, res) => {
 });
 
 // apply for a job [todo: test: done]
+// 1 applicant chỉ đc apply tối đa 10 job cùng lúc và ko đc apply khi đã có application đc accepted
 router.post("/jobs/:id/applications", jwtAuth, (req, res) => {
   const user = req.user;
-  if (user.type != "applicant") {
+  if (user.type != "applicant") { // Chỉ applicant mới đc ứng tuyển job
     res.status(401).json({
       message: "You don't have permissions to apply for a job",
     });
@@ -500,11 +506,12 @@ router.post("/jobs/:id/applications", jwtAuth, (req, res) => {
   // check user had < 10 active applications && check if user is not having any accepted jobs (user id)
   // store the data in applications
 
-  Application.findOne({
+  Application.findOne({ 
     userId: user._id,
     jobId: jobId,
     status: {
       $nin: ["deleted", "accepted", "cancelled"],
+
     },
   })
     .then((appliedApplication) => {
@@ -524,10 +531,12 @@ router.post("/jobs/:id/applications", jwtAuth, (req, res) => {
             });
             return;
           }
-          Application.countDocuments({
+          Application.countDocuments({ // đếm các application của job này còn active
             jobId: jobId,
             status: {
               $nin: ["rejected", "deleted", "cancelled", "finished"],
+              // trường status phải khác các giá trị trong mảng hoặc status ko tồn tại
+              // các giá trị status này nghĩa là Application này là inactive
             },
           })
             .then((activeApplicationCount) => {
@@ -540,11 +549,11 @@ router.post("/jobs/:id/applications", jwtAuth, (req, res) => {
                 })
                   .then((myActiveApplicationCount) => {
                     if (myActiveApplicationCount < 10) {
-                      Application.countDocuments({
+                      Application.countDocuments({ // đếm các Application của user đã accept
                         userId: user._id,
                         status: "accepted",
                       }).then((acceptedJobs) => {
-                        if (acceptedJobs === 0) {
+                        if (acceptedJobs === 0) { // nếu chưa có Application nào chưa đc accept thì mới tạo application mới
                           const application = new Application({
                             userId: user._id,
                             recruiterId: job.userId,
@@ -553,7 +562,7 @@ router.post("/jobs/:id/applications", jwtAuth, (req, res) => {
                             sop: data.sop,
                           });
                           application
-                            .save()
+                            .save() // lưu application mới tạo
                             .then(() => {
                               res.json({
                                 message: "Job application successful",
@@ -562,7 +571,7 @@ router.post("/jobs/:id/applications", jwtAuth, (req, res) => {
                             .catch((err) => {
                               res.status(400).json(err);
                             });
-                        } else {
+                        } else { // nếu đã có application đc accepted thì ko tạo application, thông báo ko thể apply
                           res.status(400).json({
                             message:
                               "You already have an accepted job. Hence you cannot apply.",
@@ -627,7 +636,7 @@ router.get("/jobs/:id/applications", jwtAuth, (req, res) => {
     };
   }
 
-  Application.find(findParams)
+  Application.find(findParams) // findParams gồm: jobId, recruiterId, status (optional). 
     .collation({ locale: "en" })
     .sort(sortParams)
     // .skip(skip)
@@ -650,20 +659,20 @@ router.get("/applications", jwtAuth, (req, res) => {
 
   Application.aggregate([
     {
-      $lookup: {
+      $lookup: { // phép kết nối ngoài trái bảng Application (trái) và bảng ApplicantInfo (phải) theo trường userId
         from: "jobapplicantinfos",
         localField: "userId",
         foreignField: "userId",
-        as: "jobApplicant",
+        as: "jobApplicant", // kết quả: các bản ghi Application đc thêm trường "jobApplicant" là 1 mảng gồm các bản ghi Applicant có userId tương ứng (qh Application - Applicant là N:1, hay 1 Application xác định 1 Applicant)
       },
     },
-    { $unwind: "$jobApplicant" },
+    { $unwind: "$jobApplicant" }, // tách mảng jobApplication trong mỗi bản ghi, thu đc các bản ghi là tất cả Application, mỗi Application chứa jobApplicant là 1 bản ghi về Applicant tương ứng
     {
       $lookup: {
         from: "jobs",
         localField: "jobId",
         foreignField: "_id",
-        as: "job",
+        as: "job", // kết quả: các bản ghi Application đã chứa jobApplicant giờ có thêm trường job là mảng gồm các bản ghi Job (thông tin của job)
       },
     },
     { $unwind: "$job" },
@@ -672,18 +681,18 @@ router.get("/applications", jwtAuth, (req, res) => {
         from: "recruiterinfos",
         localField: "recruiterId",
         foreignField: "userId",
-        as: "recruiter",
+        as: "recruiter", // kết quả: các bản ghi Application có thêm jobApplicant, job (job info), mảng bản ghi recruiter
       },
     },
-    { $unwind: "$recruiter" },
+    { $unwind: "$recruiter" }, // kết quả: các bản ghi Application có thêm jobApplicant, Job (job info), Recruiter
     {
       $match: {
-        [user.type === "recruiter" ? "recruiterId" : "userId"]: user._id,
+        [user.type === "recruiter" ? "recruiterId" : "userId"]: user._id, // chỉ các id của user gửi request này
       },
     },
     {
       $sort: {
-        dateOfApplication: -1,
+        dateOfApplication: -1, // sắp xếp theo ngày giảm dần
       },
     },
   ])
