@@ -63,10 +63,11 @@ router.get("/jobs", jwtAuth, (req, res) => {
   if (user.type === "recruiter" && req.query.myjobs) {
     findParams = {
       ...findParams,
-      userId: user._id,
+      userId: user._id, // thêm user id của recruiter vào findParams
     };
   }
 
+  // Thêm query q vào findParams (tìm theo title của job?)
   if (req.query.q) {
     findParams = {
       ...findParams,
@@ -76,6 +77,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
     };
   }
 
+  // Thêm thể loại job vào findParams
   if (req.query.jobType) {
     let jobTypes = [];
     if (Array.isArray(req.query.jobType)) {
@@ -92,6 +94,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
     };
   }
 
+  // Thêm lương tối thiểu hoặc lương tối đa hoặc cả hai vào findParams
   if (req.query.salaryMin && req.query.salaryMax) {
     findParams = {
       ...findParams,
@@ -124,6 +127,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
     };
   }
 
+  // thêm (thời lượng?) vào findParams
   if (req.query.duration) {
     findParams = {
       ...findParams,
@@ -133,6 +137,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
     };
   }
 
+  // Thêm thứ tự sắp xếp
   if (req.query.asc) {
     if (Array.isArray(req.query.asc)) {
       req.query.asc.map((key) => {
@@ -149,6 +154,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
     }
   }
 
+  // Thêm thứ tự sắp xếp
   if (req.query.desc) {
     if (Array.isArray(req.query.desc)) {
       req.query.desc.map((key) => {
@@ -172,6 +178,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
   // .skip(skip)
   // .limit(limit)
 
+  /* Khởi tạo một aggregation pipeline trong mongodb để kết nối ngoài trái bảng Job (trái) và bảng Recruiter (phải) theo userId rồi tìm những bản ghi phù hợp với findParams */
   let arr = [
     {
       $lookup: {
@@ -185,6 +192,7 @@ router.get("/jobs", jwtAuth, (req, res) => {
     { $match: findParams },
   ];
 
+  // Thêm thứ tự sắp xếp nếu có
   if (Object.keys(sortParams).length > 0) {
     arr = [
       {
@@ -205,6 +213,8 @@ router.get("/jobs", jwtAuth, (req, res) => {
 
   console.log(arr);
 
+  /* Thực hiện kết nối ngoài trái bảng Job và bảng RecruiterInfo và lọc bản ghi theo findParams
+  sau đó trả về response theo kết quả truy vấn */
   Job.aggregate(arr)
     .then((posts) => {
       if (posts == null) {
@@ -222,6 +232,8 @@ router.get("/jobs", jwtAuth, (req, res) => {
 
 // to get info about a particular job
 router.get("/jobs/:id", jwtAuth, (req, res) => {
+
+  // Tìm 1 job có theo id trong CSDL và gửi response theo kết quả truy vấn
   Job.findOne({ _id: req.params.id })
     .then((job) => {
       if (job == null) {
@@ -240,7 +252,7 @@ router.get("/jobs/:id", jwtAuth, (req, res) => {
 // to update info of a particular job
 router.put("/jobs/:id", jwtAuth, (req, res) => {
   const user = req.user;
-  if (user.type != "recruiter") {
+  if (user.type != "recruiter") { // Chỉ có 
     res.status(401).json({
       message: "You don't have permissions to change the job details",
     });

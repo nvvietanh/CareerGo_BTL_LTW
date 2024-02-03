@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 let schema = new mongoose.Schema(
   {
-    userId: {
+    userId: { // id của recruiter đã thêm job?
       type: mongoose.Schema.Types.ObjectId,
       required: true,
     },

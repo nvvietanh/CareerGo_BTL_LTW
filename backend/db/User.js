@@ -24,6 +24,8 @@ let schema = new mongoose.Schema(
 );
 
 // Password hashing
+// Mã hóa mật khẩu trước khi lưu vào CSDL
+// Nếu mật khẩu thay đổi thì phải mã hóa và lưu mật khẩu đã mã hóa mới, ko thì ko làm gì mật khẩu.
 schema.pre("save", function (next) {
   let user = this;
 
@@ -32,6 +34,7 @@ schema.pre("save", function (next) {
     return next();
   }
 
+  // Hàm băm để mã hóa mật khẩu
   bcrypt.hash(user.password, 10, (err, hash) => {
     if (err) {
       return next(err);
@@ -42,18 +45,19 @@ schema.pre("save", function (next) {
 });
 
 // Password verification upon login
+// So sánh password do người dùng nhập và password trong CSDL
 schema.methods.login = function (password) {
-  let user = this;
+  let user = this; // đây là đối tượng user lấy trong CSDL (trùng với email do người dùng nhập)
 
   return new Promise((resolve, reject) => {
     bcrypt.compare(password, user.password, (err, result) => {
       if (err) {
-        reject(err);
+        reject(err); // nếu có lỗi thì gọi reject promise
       }
       if (result) {
-        resolve();
+        resolve(); // nếu có kết quả thì gọi resolve promise
       } else {
-        reject();
+        reject(); // nếu không có kết quả thì gọi reject promise
       }
     });
   });

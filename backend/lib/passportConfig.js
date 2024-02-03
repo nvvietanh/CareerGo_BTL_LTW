@@ -1,13 +1,14 @@
-const passport = require("passport");
-const Strategy = require("passport-local").Strategy;
+const passport = require("passport"); // Sử dụng module passport của nodejs
+const Strategy = require("passport-local").Strategy; // Lớp Strategy
 
-const passportJWT = require("passport-jwt");
+const passportJWT = require("passport-jwt"); // Sử dụng module passport jwt
 const JWTStrategy = passportJWT.Strategy;
 const ExtractJWT = passportJWT.ExtractJwt;
 
 const User = require("../db/User");
 const authKeys = require("./authKeys");
 
+// to remove unwantedKeys from Json Object
 const filterJson = (obj, unwantedKeys) => {
   const filteredObj = {};
   Object.keys(obj).forEach((key) => {
@@ -37,7 +38,7 @@ passport.use(
         }
 
         user
-          .login(password)
+          .login(password) // so sánh mật khẩu nhập vào với mật khẩu của user tìm đc trong CSDL
           .then(() => {
             // let userSecure = {};
             // const unwantedKeys = ["password", "__v"];
