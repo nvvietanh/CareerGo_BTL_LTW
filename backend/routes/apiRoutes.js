@@ -711,7 +711,7 @@ router.put("/applications/:id", jwtAuth, (req, res) => {
   const status = req.body.status;
 
   // "applied", // when a applicant is applied
-  // "shortlisted", // when a applicant is shortlisted
+  // "shortlisted", // when a applicant is shortlisted // Applicant lọt vào danh sách rút gọn
   // "accepted", // when a applicant is accepted
   // "rejected", // when a applicant is rejected
   // "deleted", // when any job is deleted
@@ -725,7 +725,7 @@ router.put("/applications/:id", jwtAuth, (req, res) => {
       // count applications that are already accepted
       // compare and if condition is satisfied, then save
 
-      Application.findOne({
+      Application.findOne({ // tìm application cần cập nhật trạng thái
         _id: id,
         recruiterId: user._id,
       })
@@ -737,7 +737,7 @@ router.put("/applications/:id", jwtAuth, (req, res) => {
             return;
           }
 
-          Job.findOne({
+          Job.findOne({ // tìm job của application cần cập nhật trạng thái (để cập nhật trạng thái của application theo tình trạng job)
             _id: application.jobId,
             userId: user._id,
           }).then((job) => {
@@ -748,32 +748,26 @@ router.put("/applications/:id", jwtAuth, (req, res) => {
               return;
             }
 
-            Application.countDocuments({
+            Application.countDocuments({ // đếm số Application đc accepted
               recruiterId: user._id,
               jobId: job._id,
               status: "accepted",
             }).then((activeApplicationCount) => {
               if (activeApplicationCount < job.maxPositions) {
-                // accepted
-                application.status = status;
+                // accepted // nếu số application đã accepted nhỏ hơn số vị trí tối đa của job thì application này có thể đc accept
+                application.status = status; // = accepted
                 application.dateOfJoining = req.body.dateOfJoining;
                 application
                   .save()
                   .then(() => {
-                    Application.updateMany(
+                    Application.updateMany( // Cancel các application khác của user của application trên.
                       {
                         _id: {
                           $ne: application._id,
                         },
                         userId: application.userId,
                         status: {
-                          $nin: [
-                            "rejected",
-                            "deleted",
-                            "cancelled",
-                            "accepted",
-                            "finished",
-                          ],
+                          $nin: ["rejected", "deleted", "cancelled", "accepted", "finished",],
                         },
                       },
                       {
@@ -785,7 +779,7 @@ router.put("/applications/:id", jwtAuth, (req, res) => {
                     )
                       .then(() => {
                         if (status === "accepted") {
-                          Job.findOneAndUpdate(
+                          Job.findOneAndUpdate( // tìm và cập nhật acceptedCandidates của job 
                             {
                               _id: job._id,
                               userId: user._id,
@@ -864,7 +858,7 @@ router.put("/applications/:id", jwtAuth, (req, res) => {
           res.status(400).json(err);
         });
     }
-  } else {
+  } else { // if user.type = "applicant"
     if (status === "cancelled") {
       console.log(id);
       console.log(user._id);
@@ -967,10 +961,10 @@ router.get("/applicants", jwtAuth, (req, res) => {
           from: "jobapplicantinfos",
           localField: "userId",
           foreignField: "userId",
-          as: "jobApplicant",
+          as: "jobApplicant", 
         },
       },
-      { $unwind: "$jobApplicant" },
+      { $unwind: "$jobApplicant" }, // các bản ghi Application có thêm trường jobApplicant là bản ghi Applicant
       {
         $lookup: {
           from: "jobs",
@@ -979,10 +973,10 @@ router.get("/applicants", jwtAuth, (req, res) => {
           as: "job",
         },
       },
-      { $unwind: "$job" },
-      { $match: findParams },
+      { $unwind: "$job" }, // các bản ghi Application có thêm trường jobApplicant và job là bản ghi job info
+      { $match: findParams }, // lọc theo findParams (gồm recruiterId, jobId (optional), status (optional))
       { $sort: sortParams },
-    ])
+    ]) // -> mảng các bản ghi Application có thêm trường jobApplicant, job đã lọc
       .then((applications) => {
         if (applications.length === 0) {
           res.status(404).json({
@@ -1003,20 +997,21 @@ router.get("/applicants", jwtAuth, (req, res) => {
 });
 
 // to add or update a rating [todo: test]
+// Recruiter đánh giá Applicant, Applicant đánh giá Job
 router.put("/rating", jwtAuth, (req, res) => {
   const user = req.user;
   const data = req.body;
   if (user.type === "recruiter") {
-    // can rate applicant
+    // can rate applicant // đánh giá 1 applicant cụ thể
     Rating.findOne({
-      senderId: user._id,
+      senderId: user._id, 
       receiverId: data.applicantId,
       category: "applicant",
     })
       .then((rating) => {
         if (rating === null) {
           console.log("new rating");
-          Application.countDocuments({
+          Application.countDocuments({ // đếm số accepted Application mà Applicant đc đánh giá đã apply Recruiter thực hiện request này
             userId: data.applicantId,
             recruiterId: user._id,
             status: {
@@ -1026,7 +1021,6 @@ router.put("/rating", jwtAuth, (req, res) => {
             .then((acceptedApplicant) => {
               if (acceptedApplicant > 0) {
                 // add a new rating
-
                 rating = new Rating({
                   category: "applicant",
                   receiverId: data.applicantId,
@@ -1040,7 +1034,7 @@ router.put("/rating", jwtAuth, (req, res) => {
                     // get the average of ratings
                     Rating.aggregate([
                       {
-                        $match: {
+                        $match: { // lọc theo id của applicant đc đánh giá
                           receiverId: mongoose.Types.ObjectId(data.applicantId),
                           category: "applicant",
                         },
@@ -1051,7 +1045,7 @@ router.put("/rating", jwtAuth, (req, res) => {
                           average: { $avg: "$rating" },
                         },
                       },
-                    ])
+                    ]) // -> { average : <number> }
                       .then((result) => {
                         // update the user's rating
                         if (result === null) {
@@ -1095,7 +1089,7 @@ router.put("/rating", jwtAuth, (req, res) => {
                   .catch((err) => {
                     res.status(400).json(err);
                   });
-              } else {
+              } else { // acceptedApplicant <= 0
                 // you cannot rate
                 res.status(400).json({
                   message:
@@ -1106,7 +1100,7 @@ router.put("/rating", jwtAuth, (req, res) => {
             .catch((err) => {
               res.status(400).json(err);
             });
-        } else {
+        } else { // if rating != null
           rating.rating = data.rating;
           rating
             .save()
@@ -1173,7 +1167,7 @@ router.put("/rating", jwtAuth, (req, res) => {
       .catch((err) => {
         res.status(400).json(err);
       });
-  } else {
+  } else { // user.type = "applicant"
     // applicant can rate job
     Rating.findOne({
       senderId: user._id,
@@ -1196,7 +1190,7 @@ router.put("/rating", jwtAuth, (req, res) => {
             .then((acceptedApplicant) => {
               if (acceptedApplicant > 0) {
                 // add a new rating
-
+                // Thêm đánh giá nếu applicant có application đã accepted, nghĩa là đang hoặc từng làm job này.
                 rating = new Rating({
                   category: "job",
                   receiverId: data.jobId,
@@ -1274,7 +1268,7 @@ router.put("/rating", jwtAuth, (req, res) => {
             .catch((err) => {
               res.status(400).json(err);
             });
-        } else {
+        } else { // if rating != null
           // update the rating
           rating.rating = data.rating;
           rating
@@ -1346,6 +1340,7 @@ router.put("/rating", jwtAuth, (req, res) => {
 });
 
 // get personal rating
+// Applicant xem đánh giá về mình, Recruiter xem đánh giá về job của mình.
 router.get("/rating", jwtAuth, (req, res) => {
   const user = req.user;
   Rating.findOne({
